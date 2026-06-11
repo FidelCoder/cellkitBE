@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1"
 async-trait = "0.1"
-axum = "0.7"
+axum = "0.8"
 ckb-jsonrpc-types = "0.202.0"
 ckb-sdk = { version = "4.4.0", default-features = false }
 ckb-types = "0.202.0"
@@ -17,9 +17,17 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "1"
 tokio = { version = "1", features = ["full"] }
-tower-http = { version = "0.5", features = ["cors", "trace"] }
+tower = { version = "0.5", features = ["util"] }
+vercel_runtime = { version = "2", features = ["axum"] }
+tower-http = { version = "0.6", features = ["cors", "trace"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
-[dev-dependencies]
-tower = { version = "0.5", features = ["util"] }
+[[bin]]
+name = "axum"
+path = "api/axum.rs"
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+opt-level = 3
