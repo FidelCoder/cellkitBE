@@ -108,6 +108,12 @@ impl AppConfig {
         })
     }
 
+    pub fn require_rpc_url(&self) -> Result<&str, crate::error::ApiError> {
+        self.ckb_rpc_url.as_deref().ok_or_else(|| {
+            crate::error::ApiError::missing_config("CKB RPC is not configured. Set CKB_RPC_URL.")
+        })
+    }
+
     pub fn testnet_xudt_cell_dep(&self) -> Result<CellDepConfig, crate::error::ApiError> {
         let Some(code_hash) = self.xudt.code_hash.clone() else {
             return Err(crate::error::ApiError::missing_config(

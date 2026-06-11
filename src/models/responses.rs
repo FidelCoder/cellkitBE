@@ -63,3 +63,38 @@ pub fn standard_next_steps() -> Vec<String> {
         "Broadcast signed transaction".to_string(),
     ]
 }
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ValidateSignedTransactionResponse {
+    pub valid: bool,
+    pub errors: Vec<String>,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DryRunTransactionResponse {
+    pub status: String,
+    pub network: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dry_run: Option<serde_json::Value>,
+    #[serde(default)]
+    pub warnings: Vec<String>,
+    #[serde(default)]
+    pub next_steps: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BroadcastTransactionResponse {
+    pub status: String,
+    pub network: String,
+    pub tx_hash: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dry_run: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub explorer_url: Option<String>,
+    #[serde(default)]
+    pub next_steps: Vec<String>,
+}

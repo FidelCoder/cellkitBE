@@ -1,5 +1,6 @@
 pub mod actions;
 pub mod health;
+pub mod transactions;
 
 use std::sync::Arc;
 
@@ -27,6 +28,7 @@ pub fn router(config: AppConfig) -> Router {
     Router::new()
         .merge(health::router())
         .merge(actions::router())
+        .merge(transactions::router())
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(state)

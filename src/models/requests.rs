@@ -81,3 +81,11 @@ pub struct EstimateFeeRequest {
     pub transaction: serde_json::Value,
     pub fee_rate: String,
 }
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SignedTransactionRequest {
+    pub network: String,
+    pub transaction: serde_json::Value,
+    pub skip_dry_run: Option<bool>,
+}

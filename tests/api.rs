@@ -185,3 +185,93 @@ async fn missing_xudt_config_returns_clear_error() {
         .unwrap()
         .contains("xUDT cell dep is not configured"));
 }
+
+fn signed_transaction_with_witnesses() -> Value {
+    json!({
+        "version": "0x0",
+        "cellDeps": [{"out_point": {"tx_hash": "0x0000000000000000000000000000000000000000000000000000000000000000", "index": "0x0"}, "dep_type": "dep_group"}],
+        "headerDeps": [],
+        "inputs": [{
+            "previous_output": {
+                "tx_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                "index": "0x0"
+            },
+            "since": "0x0"
+        }],
+        "outputs": [{
+            "capacity": "0x174876e800",
+            "lock": {
+                "code_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                "hash_type": "type",
+                "args": "0x"
+            },
+            "type": null
+        }],
+        "outputsData": ["0x"],
+        "witnesses": ["0x1234"]
+    })
+}
+
+#[tokio::test]
+async fn validate_signed_transaction_endpoint_reports_unsigned_payload() {
+    let (status, value) = json_request(
+        "POST",
+        "/api/transactions/validate-signed",
+        json!({
+            "network": "testnet",
+            "transaction": {
+                "version": "0x0",
+                "cellDeps": [{"out_point": {"tx_hash": "0x0000000000000000000000000000000000000000000000000000000000000000", "index": "0x0"}, "dep_type": "dep_group"}],
+                "headerDeps": [],
+                "inputs": [],
+                "outputs": [],
+                "outputsData": [],
+                "witnesses": []
+            }
+        }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(value["valid"], false);
+    assert!(value["errors"].as_array().unwrap().iter().any(|error| error
+        .as_str()
+        .unwrap()
+        .contains("signed transaction is required")));
+}
+
+#[tokio::test]
+async fn validate_signed_transaction_endpoint_accepts_witnesses() {
+    let (status, value) = json_request(
+        "POST",
+        "/api/transactions/validate-signed",
+        json!({
+            "network": "testnet",
+            "transaction": signed_transaction_with_witnesses()
+        }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(value["valid"], true);
+}
+
+#[tokio::test]
+async fn dry_run_requires_rpc_config() {
+    let (status, value) = json_request(
+        "POST",
+        "/api/transactions/dry-run",
+        json!({
+            "network": "testnet",
+            "transaction": signed_transaction_with_witnesses()
+        }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(value["error"], "missing_config");
+    assert!(value["message"]
+        .as_str()
+        .unwrap()
+        .contains("CKB RPC is not configured"));
+}

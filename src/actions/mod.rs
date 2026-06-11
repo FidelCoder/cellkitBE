@@ -4,6 +4,7 @@ pub mod ckb_transfer;
 pub mod data_cell_create;
 pub mod estimate_fee;
 pub mod registry;
+pub mod transactions;
 pub mod validate;
 pub mod xudt_transfer;
 
