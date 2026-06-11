@@ -1,6 +1,6 @@
 use std::env;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Network {
     Testnet,
 }
@@ -22,10 +22,20 @@ pub struct AppConfig {
     pub ckb_indexer_url: Option<String>,
     pub default_fee_rate: u64,
     pub xudt: XudtConfig,
+    pub secp256k1: Secp256k1Config,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct XudtConfig {
+    pub code_hash: Option<String>,
+    pub hash_type: Option<String>,
+    pub tx_hash: Option<String>,
+    pub index: Option<String>,
+    pub dep_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct Secp256k1Config {
     pub code_hash: Option<String>,
     pub hash_type: Option<String>,
     pub tx_hash: Option<String>,
@@ -74,6 +84,15 @@ impl AppConfig {
                 dep_type: optional_env("TESTNET_XUDT_DEP_TYPE")
                     .or_else(|| Some("code".to_string())),
             },
+            secp256k1: Secp256k1Config {
+                code_hash: optional_env("TESTNET_SECP256K1_CODE_HASH"),
+                hash_type: optional_env("TESTNET_SECP256K1_HASH_TYPE")
+                    .or_else(|| Some("type".to_string())),
+                tx_hash: optional_env("TESTNET_SECP256K1_TX_HASH"),
+                index: optional_env("TESTNET_SECP256K1_INDEX"),
+                dep_type: optional_env("TESTNET_SECP256K1_DEP_TYPE")
+                    .or_else(|| Some("dep_group".to_string())),
+            },
         }
     }
 
@@ -84,7 +103,7 @@ impl AppConfig {
     pub fn require_indexer_url(&self) -> Result<&str, crate::error::ApiError> {
         self.ckb_indexer_url.as_deref().ok_or_else(|| {
             crate::error::ApiError::missing_config(
-                "CKB indexer is not configured. Cell selection requires live chain access.",
+                "CKB indexer is not configured. Set CKB_INDEXER_URL.",
             )
         })
     }
@@ -114,7 +133,7 @@ impl AppConfig {
                 .clone()
                 .unwrap_or_else(|| "type".to_string()),
             out_point: serde_json::json!({
-                "txHash": tx_hash,
+                "tx_hash": tx_hash,
                 "index": index,
             }),
             dep_type: self

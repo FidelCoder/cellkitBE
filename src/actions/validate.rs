@@ -33,6 +33,10 @@ pub fn validate_transaction_shape(
     }
 
     let outputs = tx.get("outputs").and_then(|value| value.as_array());
+    if matches!(outputs, Some(items) if items.is_empty()) {
+        errors.push("transaction.outputs must contain at least one output".to_string());
+    }
+
     let outputs_data = tx.get("outputsData").and_then(|value| value.as_array());
     match (outputs, outputs_data) {
         (Some(outputs), Some(outputs_data)) if outputs.len() != outputs_data.len() => {
@@ -41,6 +45,31 @@ pub fn validate_transaction_shape(
             );
         }
         _ => {}
+    }
+
+    if let Some(outputs) = outputs {
+        for (index, output) in outputs.iter().enumerate() {
+            match output
+                .get("capacity")
+                .and_then(|capacity| capacity.as_str())
+            {
+                Some(capacity) if is_hex_quantity(capacity) => {}
+                _ => errors.push(format!(
+                    "transaction.outputs[{index}].capacity must be a valid hex quantity"
+                )),
+            }
+        }
+    }
+
+    if let Some(outputs_data) = outputs_data {
+        for (index, output_data) in outputs_data.iter().enumerate() {
+            match output_data.as_str() {
+                Some(output_data) if is_hex_data(output_data) => {}
+                _ => errors.push(format!(
+                    "transaction.outputsData[{index}] must be 0x-prefixed hex"
+                )),
+            }
+        }
     }
 
     let cell_deps = tx.get("cellDeps").and_then(|value| value.as_array());
@@ -52,14 +81,40 @@ pub fn validate_transaction_shape(
         errors.push("transaction.cellDeps must include required script deps for xUDT/type-script transactions".to_string());
     }
 
-    let witnesses = tx.get("witnesses").and_then(|value| value.as_array());
-    if let (Some(inputs), Some(witnesses)) = (inputs, witnesses) {
-        if !inputs.is_empty() && witnesses.is_empty() {
-            warnings.push(
-                "transaction.witnesses is empty; wallet signing usually needs witness placeholders"
-                    .to_string(),
+    if request.action.as_deref() == Some("ckb.transfer") {
+        if matches!(cell_deps, Some(items) if items.is_empty()) {
+            errors.push(
+                "transaction.cellDeps must include secp256k1 dep for CKB transfer".to_string(),
             );
         }
+        if let Some(cell_deps) = cell_deps {
+            let has_secp_like_dep = cell_deps.iter().any(|dep| {
+                dep.get("out_point").is_some()
+                    && dep
+                        .get("dep_type")
+                        .and_then(|value| value.as_str())
+                        .is_some_and(|dep_type| dep_type == "code" || dep_type == "dep_group")
+            });
+            if !cell_deps.is_empty() && !has_secp_like_dep {
+                errors.push(
+                    "transaction.cellDeps should include secp256k1 dep for default lock"
+                        .to_string(),
+                );
+            }
+        }
+    }
+
+    let witnesses = tx.get("witnesses").and_then(|value| value.as_array());
+    if matches!(witnesses, Some(items) if items.is_empty()) {
+        warnings.push(
+            "transaction.witnesses is empty; wallet signing usually needs witness placeholders"
+                .to_string(),
+        );
+    }
+    if request.action.as_deref() == Some("ckb.transfer")
+        && matches!(witnesses, Some(items) if items.is_empty())
+    {
+        errors.push("transaction.witnesses must contain at least one placeholder".to_string());
     }
 
     Ok(ValidateActionResponse {
@@ -79,6 +134,20 @@ fn contains_key_named(value: &serde_json::Value, key: &str) -> bool {
     }
 }
 
+fn is_hex_quantity(value: &str) -> bool {
+    let Some(stripped) = value.strip_prefix("0x") else {
+        return false;
+    };
+    !stripped.is_empty() && stripped.chars().all(|char| char.is_ascii_hexdigit())
+}
+
+fn is_hex_data(value: &str) -> bool {
+    let Some(stripped) = value.strip_prefix("0x") else {
+        return false;
+    };
+    stripped.len().is_multiple_of(2) && stripped.chars().all(|char| char.is_ascii_hexdigit())
+}
+
 #[cfg(test)]
 mod tests {
     use super::validate_transaction_shape;
@@ -94,7 +163,7 @@ mod tests {
                 "cellDeps": [{}],
                 "headerDeps": [],
                 "inputs": [{}],
-                "outputs": [{}, {}],
+                "outputs": [{"capacity":"0x1"}, {"capacity":"0x2"}],
                 "outputsData": ["0x"],
                 "witnesses": [{}]
             }),
@@ -143,6 +212,7 @@ mod tests {
                 "headerDeps": [],
                 "inputs": [{}],
                 "outputs": [{
+                    "capacity": "0x1",
                     "type": {
                         "codeHash": "0x00",
                         "hashType": "type",
@@ -160,5 +230,61 @@ mod tests {
             .errors
             .iter()
             .any(|error| error.contains("cellDeps")));
+    }
+
+    #[test]
+    fn ckb_transfer_validation_requires_output_and_witness() {
+        let response = validate_transaction_shape(&ValidateActionRequest {
+            network: "testnet".to_string(),
+            action: Some("ckb.transfer".to_string()),
+            transaction: serde_json::json!({
+                "version": "0x0",
+                "cellDeps": [{"out_point": {}, "dep_type": "dep_group"}],
+                "headerDeps": [],
+                "inputs": [{}],
+                "outputs": [],
+                "outputsData": [],
+                "witnesses": []
+            }),
+        })
+        .unwrap();
+
+        assert!(!response.valid);
+        assert!(response
+            .errors
+            .iter()
+            .any(|error| error.contains("outputs")));
+        assert!(response
+            .errors
+            .iter()
+            .any(|error| error.contains("witnesses")));
+    }
+
+    #[test]
+    fn ckb_transfer_validation_catches_invalid_hex_fields() {
+        let response = validate_transaction_shape(&ValidateActionRequest {
+            network: "testnet".to_string(),
+            action: Some("ckb.transfer".to_string()),
+            transaction: serde_json::json!({
+                "version": "0x0",
+                "cellDeps": [{"out_point": {}, "dep_type": "dep_group"}],
+                "headerDeps": [],
+                "inputs": [{}],
+                "outputs": [{"capacity": "10"}],
+                "outputsData": ["abc"],
+                "witnesses": ["0x"]
+            }),
+        })
+        .unwrap();
+
+        assert!(!response.valid);
+        assert!(response
+            .errors
+            .iter()
+            .any(|error| error.contains("capacity")));
+        assert!(response
+            .errors
+            .iter()
+            .any(|error| error.contains("outputsData")));
     }
 }

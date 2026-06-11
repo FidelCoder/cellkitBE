@@ -4,8 +4,10 @@ use axum::{
 };
 use cellkit_actions_api::{
     app,
-    config::{AppConfig, Network, XudtConfig},
+    config::{AppConfig, Network, Secp256k1Config, XudtConfig},
 };
+use ckb_sdk::{Address, AddressPayload, NetworkType};
+use ckb_types::{h160, H160};
 use serde_json::{json, Value};
 use tower::ServiceExt;
 
@@ -18,7 +20,17 @@ fn test_config() -> AppConfig {
         ckb_indexer_url: None,
         default_fee_rate: 1000,
         xudt: XudtConfig::default(),
+        secp256k1: Secp256k1Config::default(),
     }
+}
+
+fn testnet_address(suffix: u8) -> String {
+    let mut bytes = [0u8; 20];
+    bytes.copy_from_slice(h160!("0xb39bbc0b3673c7d36450bc14cfcdad2d559c6c64").as_bytes());
+    bytes[19] = suffix;
+    let hash = H160::from_slice(&bytes).unwrap();
+    let payload = AddressPayload::from_pubkey_hash(hash);
+    Address::new(NetworkType::Testnet, payload, false).to_string()
 }
 
 async fn json_request(method: &str, uri: &str, body: Value) -> (StatusCode, Value) {
@@ -89,7 +101,7 @@ async fn invalid_ckb_transfer_request_returns_400() {
         json!({
             "network": "testnet",
             "fromAddress": "not-a-testnet-address",
-            "toAddress": "ckt1qqqqqqqqqqqqqqqqq",
+            "toAddress": testnet_address(2),
             "amountCkb": "0",
             "feeRate": "1000"
         }),
@@ -107,8 +119,8 @@ async fn invalid_xudt_script_returns_400() {
         "/api/actions/xudt-transfer/build",
         json!({
             "network": "testnet",
-            "fromAddress": "ckt1qqqqqqqqqqqqqqqqq",
-            "toAddress": "ckt1qqqqqqqqqqqqqqqq2",
+            "fromAddress": testnet_address(1),
+            "toAddress": testnet_address(2),
             "xudtTypeScript": {
                 "codeHash": "bad",
                 "hashType": "type",
@@ -131,8 +143,8 @@ async fn missing_indexer_config_returns_clear_error() {
         "/api/actions/ckb-transfer/build",
         json!({
             "network": "testnet",
-            "fromAddress": "ckt1qqqqqqqqqqqqqqqqq",
-            "toAddress": "ckt1qqqqqqqqqqqqqqqq2",
+            "fromAddress": testnet_address(1),
+            "toAddress": testnet_address(2),
             "amountCkb": "100",
             "feeRate": "1000"
         }),
@@ -154,8 +166,8 @@ async fn missing_xudt_config_returns_clear_error() {
         "/api/actions/xudt-transfer/build",
         json!({
             "network": "testnet",
-            "fromAddress": "ckt1qqqqqqqqqqqqqqqqq",
-            "toAddress": "ckt1qqqqqqqqqqqqqqqq2",
+            "fromAddress": testnet_address(1),
+            "toAddress": testnet_address(2),
             "xudtTypeScript": {
                 "codeHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
                 "hashType": "type",
